@@ -319,6 +319,30 @@ body::before { background: var(--surface); }
 
 /* LINE preview keeps LINE's own look */
 .chat-head { background: var(--brand-navy); }
+
+/* ---- ปุ่มต้องดูออกว่ากดได้ ---- */
+.btn { border: 1.5px solid color-mix(in srgb, var(--accent) 45%, var(--line)); color: var(--accent); background: var(--surface);
+  box-shadow: 0 2px 0 color-mix(in srgb, var(--accent) 35%, transparent), 0 3px 8px rgba(12,36,88,.10); transition: transform .06s, box-shadow .06s; }
+.btn:active:not(:disabled), .bigbtn:active, .kpi:active, .hs:active, .card.tap:active { transform: translateY(2px); box-shadow: none; }
+.btn.primary { color: #fff; }
+.btn.danger { color: var(--bad); border-color: var(--bad); box-shadow: 0 2px 0 color-mix(in srgb, var(--bad) 35%, transparent); }
+.btn.ghost { background: var(--accent-soft); border: 1.5px dashed color-mix(in srgb, var(--accent) 55%, transparent); box-shadow: none; text-decoration: none; }
+.btn:disabled { box-shadow: none; }
+.card.tap, .kpi, .bigbtn, .hs { position: relative; }
+.card.tap { border: 1.5px solid color-mix(in srgb, var(--accent) 30%, var(--line)); padding-right: 34px; box-shadow: 0 2px 0 color-mix(in srgb, var(--accent) 25%, transparent), var(--shadow); }
+.kpi { border: 1.5px solid color-mix(in srgb, var(--accent) 30%, var(--line)); box-shadow: 0 2px 0 color-mix(in srgb, var(--accent) 25%, transparent); padding-right: 26px; }
+.bigbtn { box-shadow: 0 4px 0 color-mix(in srgb, var(--accent) 30%, transparent), 0 6px 16px rgba(12,36,88,.12); padding-right: 34px; }
+.card.tap::after, .kpi::after, .bigbtn::after { content: "›"; position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-size: 26px; font-weight: 700; color: var(--accent); opacity: .75; pointer-events: none; }
+.bigbtn:first-child::after { color: #fff; }
+.hs::after { content: "แตะดู ›"; position: absolute; right: 8px; top: 6px; font-size: 10px; opacity: .8; }
+tr.click td:last-child::after { content: " ›"; color: var(--accent); font-weight: 700; }
+.who { border: 1.5px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+/* ปุ่มถ่ายรูป + ปุ่มเลือกจากคลังภาพ */
+.picks { display: flex; gap: 8px; flex-wrap: wrap; align-items: stretch; }
+.picks.block { width: 100%; }
+.picks.block .filebtn { flex: 1 1 0; }
+.picks .filebtn { white-space: nowrap; }
+.btn.gal { background: var(--surface); }
 </style>
 </head><body>
 
@@ -460,6 +484,14 @@ window.SS_API = "https://script.google.com/macros/s/AKfycbxFSPc2_uv2mvQpDC7gEfaC
       เปิดผ่าน LINE บน Android กล้องจะไม่เปิด ให้กดเปิดใน Chrome ก่อนถ่ายรูป
       <a href="${url}" target="_top" style="display:inline-block;margin-left:6px;padding:4px 12px;border-radius:999px;background:#1f5f9e;color:#fff;text-decoration:none">เปิดใน Chrome</a></div>`);
   }
+  // ปุ่ม "เลือกจากคลังภาพ": ส่งไฟล์ให้ช่องถ่ายรูปคู่กัน แล้วใช้ตัวจัดการเดิม
+  document.addEventListener("change", ev => {
+    const g = ev.target; if (!g || !g.dataset || !g.dataset.for) return;
+    const t = document.getElementById(g.dataset.for); if (!t || !g.files || !g.files.length) return;
+    try { t.files = g.files; } catch (e) {}
+    if (!t.files || !t.files.length) { try { Object.defineProperty(t, "files", { value: g.files, configurable: true }); } catch (e) {} }
+    if (typeof t.onchange === "function") t.onchange();
+  });
   async function load() {
     try {
       const st = await call("getState");
@@ -700,8 +732,8 @@ window.SS_API = "https://script.google.com/macros/s/AKfycbxFSPc2_uv2mvQpDC7gEfaC
           ${R.reading ? `<div class="banner warn" role="status"><span id="readMsg">${esc(R.readMsg)}</span> ใช้เวลาประมาณ 10–40 วินาที</div>
               <button class="btn" id="stopRead" type="button">หยุดอ่าน</button>`
             : n ? `<button class="btn primary block" id="readBtn" type="button">สร้างเช็คลิสต์จาก ${n} หน้า</button>
-              ${n < MAX_PAGES ? `<label class="btn block filebtn">+ ถ่ายหน้าถัดไป<input type="file" accept="image/*" capture="environment" id="doCam"></label>` : ""}`
-            : `<label class="btn primary block filebtn">ถ่ายรูปใบส่งของ<input type="file" accept="image/*" capture="environment" id="doCam"></label>`}
+              ${n < MAX_PAGES ? `<div class="picks block"><label class="btn filebtn cam">📷 + ถ่ายหน้าถัดไป<input type="file" accept="image/*" capture="environment" id="doCam"></label><label class="btn filebtn gal">🖼️ จากคลังภาพ<input type="file" accept="image/*" data-for="doCam"></label></div>` : ""}`
+            : `<div class="picks block"><label class="btn primary filebtn cam">📷 ถ่ายรูปใบส่งของ<input type="file" accept="image/*" capture="environment" id="doCam"></label><label class="btn filebtn gal">🖼️ จากคลังภาพ<input type="file" accept="image/*" data-for="doCam"></label></div>`}
           ${R.readNote ? `<div class="note">${esc(R.readNote)}</div>` : ""}
         </section>
         ${R.reading ? "" : `<section class="card stack">
@@ -736,7 +768,7 @@ window.SS_API = "https://script.google.com/macros/s/AKfycbxFSPc2_uv2mvQpDC7gEfaC
         <span class="eyebrow">ขั้นที่ 3 จาก 3 · ไม่มีใบส่งของ</span>
         <div class="f"><span>รูปของที่มาส่ง (อย่างน้อย 1 รูป)</span></div>
         ${R.goods.length ? thumbStrip(R.goods, "goods") : ""}
-        <label class="btn ${R.goods.length ? "" : "primary"} block filebtn">${R.goods.length ? "+ ถ่ายรูปเพิ่ม" : "ถ่ายรูปของที่มาส่ง"}<input type="file" accept="image/*" capture="environment" id="goodsCam"></label>
+        <div class="picks block"><label class="btn ${R.goods.length ? "" : "primary"} filebtn cam">📷 ${R.goods.length ? "+ ถ่ายรูปเพิ่ม" : "ถ่ายรูปของที่มาส่ง"}<input type="file" accept="image/*" capture="environment" id="goodsCam"></label><label class="btn ${R.goods.length ? "" : ""} filebtn gal">🖼️ จากคลังภาพ<input type="file" accept="image/*" data-for="goodsCam"></label></div>
         ${R.readNote ? `<div class="note">${esc(R.readNote)}</div>` : ""}
         <button class="btn ghost small" id="toPhoto" type="button">มีใบส่งของ กลับไปถ่ายใบส่งของ</button>
       </section>` : `<section class="card stack">
@@ -757,7 +789,7 @@ window.SS_API = "https://script.google.com/macros/s/AKfycbxFSPc2_uv2mvQpDC7gEfaC
       ${R.noDo ? "" : `<section class="card stack">
         <div class="f"><span>รูปกองของ (ไม่บังคับ)</span></div>
         ${R.goods.length ? thumbStrip(R.goods, "goods") : ""}
-        <label class="btn small filebtn" style="align-self:flex-start">${R.goods.length ? "+ ถ่ายเพิ่ม" : "ถ่ายรูปกองของ"}<input type="file" accept="image/*" capture="environment" id="goodsCam"></label>
+        <div class="picks" style="align-self:flex-start"><label class="btn small filebtn cam">📷 ${R.goods.length ? "+ ถ่ายเพิ่ม" : "ถ่ายรูปกองของ"}<input type="file" accept="image/*" capture="environment" id="goodsCam"></label><label class="btn small filebtn gal">🖼️ จากคลังภาพ<input type="file" accept="image/*" data-for="goodsCam"></label></div>
       </section>`}
       ${anyFail ? `<div class="banner bad">มีรายการแจ้งปัญหา ของส่วนนั้นจะเข้าสต๊อกพัก ห้ามเบิก และเปิด NCR ให้ PM ตัดสิน</div>` : ""}
       ${unchecked && ready.length ? `<p class="hint" style="margin:0;text-align:center">ยังไม่ติ๊ก ${unchecked} รายการ รายการที่ไม่ติ๊กจะไม่ถูกบันทึก</p>` : ""}
@@ -865,7 +897,7 @@ window.SS_API = "https://script.google.com/macros/s/AKfycbxFSPc2_uv2mvQpDC7gEfaC
   }
   function photoField(id, data, label) {
     return `<div class="photo-in">${data ? `<img class="thumb" src="${data}" alt="">` : ""}
-      <label class="btn small filebtn">${data ? "ถ่ายใหม่" : esc(label)}<input type="file" accept="image/*" capture="environment" id="${id}"></label></div>`;
+      <div class="picks"><label class="btn small filebtn cam">📷 ${data ? "ถ่ายใหม่" : esc(label)}<input type="file" accept="image/*" capture="environment" id="${id}"></label><label class="btn small filebtn gal">🖼️ จากคลังภาพ<input type="file" accept="image/*" data-for="${id}"></label></div></div>`;
   }
   function bindPhoto(id, set) {
     const inp = document.getElementById(id); if (!inp) return;
