@@ -977,6 +977,21 @@ window.SS_API = "https://script.google.com/macros/s/AKfycbxFSPc2_uv2mvQpDC7gEfaC
     box.innerHTML = ph.length ? ph.map(p => `<a href="https://drive.google.com/file/d/${encodeURIComponent(p.id)}/view" target="_blank" rel="noopener"><img src="${driveImg(p.id)}" alt="${esc(p.kind)}" title="${esc(p.kind)}"></a>`).join("") : `<span class="hint">ไม่มีรูปแนบ</span>`;
   }
 
+  function showIssue(no) {
+    const r = S.issues.find(x => x.no === no); if (!r) return;
+    $("#modalRoot").innerHTML = `<div class="modal" role="dialog" aria-modal="true"><div class="sheet">
+      <div class="spread"><h2 class="mono">${esc(r.no)}</h2><button class="btn ghost small" data-close type="button">ปิด</button></div>
+      <div class="meta">${tsTH(r.at)} · ผู้เบิก ${esc(r.by)}<br>โซน ${esc(r.zone || "-")} · งาน ${esc(r.job || "-")}</div>
+      <div class="tablewrap"><table><thead><tr><th>รายการ</th><th class="n">เบิก</th></tr></thead><tbody>
+      ${r.lines.map(l => { const it = item(l.code); return `<tr><td>${esc(it.name)}<div class="li-code">${esc(it.code)}</div></td><td class="n">${fmtN(l.qty)} ${esc(it.unit)}</td></tr>`; }).join("")}
+      </tbody></table></div>
+      <span class="eyebrow">รูปถ่าย</span><div class="photos">${r.photo
+        ? `<a href="https://drive.google.com/file/d/${encodeURIComponent(r.photo)}/view" target="_blank" rel="noopener"><img src="${driveImg(r.photo)}" alt="รูปของที่เบิก ${esc(r.no)}"></a>`
+        : `<span class="hint">ไม่มีรูปแนบ</span>`}</div>
+    </div></div>`;
+    $("[data-close]").onclick = closeModal;
+  }
+
   // ---------- issue ----------
   function vIssue() {
     const q = (S.issueQ || "").trim().toLowerCase();
@@ -1011,9 +1026,12 @@ window.SS_API = "https://script.google.com/macros/s/AKfycbxFSPc2_uv2mvQpDC7gEfaC
         <p class="hint" style="text-align:center">ผู้เบิก: ${esc(actor())}</p>
       </section>
       <section class="section"><span class="eyebrow">เบิกล่าสุด</span>
-        ${recent.length ? `<div class="tablewrap"><table><thead><tr><th>เลขที่</th><th>เวลา</th><th>ผู้เบิก</th><th>รายการ</th></tr></thead><tbody>
-        ${recent.map(r => `<tr><td class="mono">${esc(r.no)}</td><td class="num">${tsTH(r.at)}</td><td>${esc(r.by)}</td><td>${r.lines.map(l => `${esc(item(l.code).name)} ×${fmtN(l.qty)}`).join("<br>")}</td></tr>`).join("")}</tbody></table></div>`
+        ${recent.length ? recent.map(r => `<div class="card tap" tabindex="0" role="button" data-isn="${esc(r.no)}">
+          <div class="po-head"><span class="po-no">${esc(r.no)}</span>${r.photo ? `<span class="pill good">📷 มีรูป</span>` : `<span class="pill mute">ไม่มีรูป</span>`}</div>
+          <div class="meta">${tsTH(r.at)} · ${esc(r.by)} · ${esc(r.zone || "")}${r.job ? " · " + esc(r.job) : ""}</div>
+          <div class="meta">${r.lines.map(l => `${esc(item(l.code).name)} ×${fmtN(l.qty)}`).join(" · ")}</div></div>`).join("")
         : `<div class="card empty">ยังไม่มีการเบิก</div>`}</section>`;
+    document.querySelectorAll("[data-isn]").forEach(el => { const f = () => showIssue(el.dataset.isn); el.onclick = f; el.onkeydown = e => { if (e.key === "Enter") f(); }; });
     const iq = $("#iq"); iq.oninput = () => { S.issueQ = iq.value; const pos = iq.selectionStart; render(); const n = $("#iq"); n.focus(); try { n.setSelectionRange(pos, pos); } catch {} };
     document.querySelectorAll("[data-add]").forEach(b => b.onclick = () => { if (!cart.find(c => c.code === b.dataset.add)) cart.push({ code: b.dataset.add, qty: 1 }); render(); });
     cart.forEach((c, i) => {
@@ -1099,7 +1117,7 @@ window.SS_API = "https://script.google.com/macros/s/AKfycbxFSPc2_uv2mvQpDC7gEfaC
       <div class="spread"><div><h2>${esc(it.name)}</h2><div class="li-code">${esc(it.code)} · ที่เก็บ ${esc(it.location)}</div></div><button class="btn ghost small" data-close type="button">ปิด</button></div>
       <div class="kpis"><div class="kpi"><b>${fmtN(s.usable)}</b><span>ใช้งานได้ (${esc(it.unit)})</span></div><div class="kpi ${s.hold ? "bad" : ""}"><b>${fmtN(s.hold)}</b><span>พัก</span></div><div class="kpi"><b>${fmtN(it.openQty)}</b><span>ยอดยกมา</span></div></div>
       <div class="tablewrap"><table><thead><tr><th>เวลา</th><th>รายการ</th><th>อ้างอิง</th><th class="n">จำนวน</th></tr></thead><tbody>
-      ${hist.map(h => `<tr><td class="num">${tsTH(h.at)}</td><td>${TYPE[h.type] || esc(h.type)}${h.bucket === "hold" ? ` <span class="pill bad">พัก</span>` : ""}<div class="hint">${esc(h.by)}</div></td><td class="mono">${esc(h.ref)}</td><td class="n" style="color:${h.qty < 0 ? "var(--bad)" : "var(--good)"};font-weight:600">${h.qty > 0 ? "+" : ""}${fmtN(h.qty)}</td></tr>`).join("")
+      ${hist.map(h => `<tr><td class="num">${tsTH(h.at)}</td><td>${TYPE[h.type] || esc(h.type)}${h.bucket === "hold" ? ` <span class="pill bad">พัก</span>` : ""}<div class="hint">${esc(h.by)}</div></td><td class="mono">${esc(h.ref)}${(() => { const is = h.type === "issue" && S.issues.find(x => x.no === h.ref); return is && is.photo ? `<div><a class="btn ghost small" href="https://drive.google.com/file/d/${encodeURIComponent(is.photo)}/view" target="_blank" rel="noopener">📷 ดูรูป</a></div>` : ""; })()}</td><td class="n" style="color:${h.qty < 0 ? "var(--bad)" : "var(--good)"};font-weight:600">${h.qty > 0 ? "+" : ""}${fmtN(h.qty)}</td></tr>`).join("")
         || `<tr><td colspan="4" class="empty">ยังไม่มีการเคลื่อนไหว ยอดเท่ากับยอดยกมา</td></tr>`}
       </tbody></table></div></div></div>`;
     $("[data-close]").onclick = closeModal;
