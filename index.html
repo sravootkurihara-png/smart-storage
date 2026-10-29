@@ -559,7 +559,7 @@ window.SS_API = "https://script.google.com/macros/s/AKfycbxFSPc2_uv2mvQpDC7gEfaC
         </button>
         <button class="bigbtn" data-go="issue" type="button">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6v3H9z"/><path d="M7 5H5v15h14V5h-2"/><path d="M9 12h6M9 16h4"/></svg>
-          <b>เบิกของ</b><span>${S.items.length} รายการในสโตร์</span>
+          <b>เบิกของ</b><span>สแกนบาร์โค้ดจากวิศวกร</span>
         </button>
       </div>
       <section class="card">
@@ -965,7 +965,7 @@ window.SS_API = "https://script.google.com/macros/s/AKfycbxFSPc2_uv2mvQpDC7gEfaC
     const r = S.issues.find(x => x.no === no); if (!r) return;
     $("#modalRoot").innerHTML = `<div class="modal" role="dialog" aria-modal="true"><div class="sheet">
       <div class="spread"><h2 class="mono">${esc(r.no)}</h2><button class="btn ghost small" data-close type="button">ปิด</button></div>
-      <div class="meta">${tsTH(r.at)} · ผู้เบิก ${esc(r.by)}<br>โซน ${esc(r.zone || "-")} · งาน ${esc(r.job || "-")}</div>
+      <div class="meta">${tsTH(r.at)} · ผู้เบิก ${esc(r.by)}<br>ดูแลการเบิก ${esc(r.supervisor || "-")}<br>โซน ${esc(r.zone || "-")} · งาน ${esc(r.job || "-")}</div>
       <div class="tablewrap"><table><thead><tr><th>รายการ</th><th class="n">เบิก</th></tr></thead><tbody>
       ${r.lines.map(l => { const it = item(l.code); return `<tr><td>${esc(it.name)}<div class="li-code">${esc(it.code)}</div></td><td class="n">${fmtN(l.qty)} ${esc(it.unit)}</td></tr>`; }).join("")}
       </tbody></table></div>
@@ -977,13 +977,120 @@ window.SS_API = "https://script.google.com/macros/s/AKfycbxFSPc2_uv2mvQpDC7gEfaC
   }
 
   // ---------- issue ----------
+  // ---------- issue gate: ต้องสแกนบาร์โค้ดจากวิศวกร/คนดูแลสโตร์ก่อนเบิก ----------
+  const supPin = () => lsGet("store.supPin") || "";
+  const activePass = () => (S.pass && S.pass.exp > Date.now() ? S.pass : null);
+  const passUrl = t => (APP_URL || location.href).split("#")[0].split("?")[0] + "?openExternalBrowser=1&pass=" + encodeURIComponent(t) + "#issue";
+  function recentIssuesHtml() {
+    const recent = [...S.issues].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 5);
+    return `<section class="section"><span class="eyebrow">เบิกล่าสุด</span>
+        ${recent.length ? recent.map(r => `<div class="card tap" tabindex="0" role="button" data-isn="${esc(r.no)}">
+          <div class="po-head"><span class="po-no">${esc(r.no)}</span>${r.photo ? `<span class="pill good">📷 มีรูป</span>` : `<span class="pill mute">ไม่มีรูป</span>`}</div>
+          <div class="meta">${tsTH(r.at)} · ${esc(r.by)}${r.supervisor ? ` · ดูแลโดย ${esc(r.supervisor)}` : ""}</div>
+          <div class="meta">${r.lines.map(l => `${esc(item(l.code).name)} ×${fmtN(l.qty)}`).join(" · ")}</div></div>`).join("")
+        : `<div class="card empty">ยังไม่มีการเบิก</div>`}</section>`;
+  }
+  function bindRecentIssues() {
+    document.querySelectorAll("[data-isn]").forEach(el => { const f = () => showIssue(el.dataset.isn); el.onclick = f; el.onkeydown = e => { if (e.key === "Enter") f(); }; });
+  }
+  function vIssueGate() {
+    if (supPin()) {
+      $("#view").innerHTML = `
+        <div><h1>เบิกของ</h1><p class="sub">โหมดผู้ดูแลการเบิก · ให้ช่างสแกนบาร์โค้ดนี้ต่อหน้าคุณ ช่างจึงจะเข้าไปเบิกได้</p></div>
+        <section class="card stack" style="align-items:center;text-align:center">
+          <span class="eyebrow">บาร์โค้ดเปิดการเบิก</span>
+          <div id="passQr" class="qrframe" style="width:216px;height:216px;display:grid;place-items:center">${S.passQr ? "" : `<span class="hint">กำลังสร้างบาร์โค้ด…</span>`}</div>
+          <div style="font-weight:600">ผู้ดูแล: ${esc(actor())}</div>
+          <p class="hint" style="margin:0">ใช้ได้ครั้งเดียว · เปลี่ยนใหม่อัตโนมัติใน <b id="passLeft">–</b><br>ช่างสแกนด้วยกล้องมือถือ แล้วหน้าเบิกของจะเปิดขึ้น</p>
+          <button class="btn small" id="newPass" type="button">สร้างบาร์โค้ดใหม่</button>
+        </section>
+        <section class="card stack">
+          <b>ผู้ดูแลจะเบิกของเอง?</b>
+          <button class="btn block" id="selfIssue" type="button">เบิกเองในฐานะผู้ดูแล</button>
+          <button class="btn ghost small" id="supOff" type="button">ออกจากโหมดผู้ดูแลในเครื่องนี้</button>
+        </section>` + recentIssuesHtml();
+      bindRecentIssues();
+      $("#newPass").onclick = () => { S.passQr = null; render(); requestPass(); };
+      $("#selfIssue").onclick = () => { S.selfIssue = true; render(); };
+      $("#supOff").onclick = () => { lsSet("store.supPin", ""); S.passQr = null; render(); };
+      if (S.passQr && S.passQr.exp > Date.now() + 5000) drawPass(); else requestPass();
+      return;
+    }
+    $("#view").innerHTML = `
+      <div><h1>เบิกของ</h1><p class="sub">การเบิกของต้องมีวิศวกรหรือคนดูแลสโตร์ดูแลทุกครั้ง</p></div>
+      <section class="card stack" style="border:2px solid var(--bad)">
+        <div style="font-size:42px;text-align:center">🔒</div>
+        <h2 style="text-align:center;margin:0">ต้องสแกนบาร์โค้ดก่อนเบิก</h2>
+        <ol style="margin:0;padding-left:20px;line-height:1.7">
+          <li>ไปหาวิศวกรหรือคนดูแลสโตร์</li>
+          <li>ขอให้เปิด "บาร์โค้ดเปิดการเบิก" ในแอป</li>
+          <li>สแกนด้วยกล้องมือถือ หน้าเบิกของจะเปิดขึ้นเอง</li>
+        </ol>
+        <p class="hint" style="margin:0">ผู้ดูแลจะเห็นของที่เบิกทุกครั้ง และชื่อผู้ดูแลจะบันทึกในใบเบิก</p>
+      </section>
+      <button class="btn ghost small" id="supOn" type="button">ฉันเป็นวิศวกร / คนดูแลสโตร์</button>` + recentIssuesHtml();
+    bindRecentIssues();
+    $("#supOn").onclick = askSupPin;
+  }
+  function askSupPin() {
+    $("#modalRoot").innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-label="รหัสผู้ดูแล"><div class="sheet">
+      <div class="spread"><h2>รหัสผู้ดูแลการเบิก</h2><button class="btn ghost small" data-close type="button">ปิด</button></div>
+      <p class="hint">ใส่รหัสที่ได้จากผู้ดูแลระบบ (ตั้งไว้ในชีต Settings ช่อง SUPERVISOR_PIN) เครื่องนี้จะจำไว้</p>
+      <label class="f">รหัส<input type="password" id="supPinIn" inputmode="numeric" autocomplete="off"></label>
+      <button class="btn primary block" id="supPinOk" type="button">ยืนยัน</button></div></div>`;
+    $("[data-close]").onclick = closeModal;
+    $("#supPinOk").onclick = async () => {
+      const v = $("#supPinIn").value.trim(); if (!v) return;
+      try { const r = await call("checkSupervisorPin", v); if (!r.ok) return toast(r.error); lsSet("store.supPin", v); closeModal(); S.passQr = null; render(); }
+      catch (e) { toast("ตรวจรหัสไม่สำเร็จ ลองอีกครั้ง"); }
+    };
+  }
+  async function requestPass() {
+    if (S.passBusy || !supPin()) return; S.passBusy = true;
+    try {
+      const r = await call("createIssuePass", supPin(), actor());
+      if (!r.ok) { toast(r.error); if (/รหัส/.test(r.error || "")) lsSet("store.supPin", ""); }
+      else S.passQr = { token: r.token, exp: Date.now() + (r.ttl || 120) * 1000 };
+    } catch (e) { toast("สร้างบาร์โค้ดไม่สำเร็จ ลองอีกครั้ง"); }
+    S.passBusy = false;
+    if (S.route === "issue" && !S.selfIssue && !activePass() && !document.querySelector(".modal")) render();
+  }
+  function drawPass() {
+    const el = $("#passQr"); if (!el || !S.passQr) return;
+    el.innerHTML = "";
+    if (window.QRCode) { try { new QRCode(el, { text: passUrl(S.passQr.token), width: 200, height: 200, colorDark: "#111111", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M }); } catch (e) { el.textContent = passUrl(S.passQr.token); } }
+    else el.innerHTML = `<span class="hint" style="word-break:break-all">${esc(passUrl(S.passQr.token))}</span>`;
+    const left = $("#passLeft"); if (left) left.textContent = Math.max(0, Math.ceil((S.passQr.exp - Date.now()) / 1000)) + " วินาที";
+  }
+  setInterval(() => {
+    if (S.route !== "issue" || !supPin() || S.selfIssue || activePass() || !S.passQr) return;
+    const left = Math.ceil((S.passQr.exp - Date.now()) / 1000);
+    if (left <= 5) { S.passQr = null; requestPass(); }
+    else { const el = $("#passLeft"); if (el) el.textContent = left + " วินาที"; }
+  }, 1000);
+  async function claimFromUrl() {
+    let tok = ""; try { tok = new URLSearchParams(location.search).get("pass") || ""; } catch {}
+    if (!tok) { try { const s = JSON.parse(sessionStorage.getItem("store.pass") || "null"); if (s && s.exp > Date.now()) S.pass = s; } catch {} return; }
+    try { const u = new URL(location.href); u.searchParams.delete("pass"); history.replaceState(null, "", u.pathname + u.search + "#issue"); } catch {}
+    try {
+      const r = await call("claimIssuePass", tok);
+      if (!r.ok) { toast(r.error); go("issue"); return; }
+      S.pass = { sid: r.sid, sup: r.sup, exp: Date.now() + 19 * 60000 };
+      try { sessionStorage.setItem("store.pass", JSON.stringify(S.pass)); } catch {}
+      toast("เปิดการเบิกแล้ว · ดูแลโดย " + r.sup); go("issue");
+    } catch (e) { toast("เปิดการเบิกไม่สำเร็จ ลองสแกนใหม่"); go("issue"); }
+  }
   function vIssue() {
+    const pass = activePass();
+    if (!pass && !S.selfIssue) return vIssueGate();
     const q = (S.issueQ || "").trim().toLowerCase();
     const list = S.items.filter(i => !q || i.name.toLowerCase().includes(q) || i.code.toLowerCase().includes(q));
     const cart = S.issueCart;
     const recent = [...S.issues].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 5);
     $("#view").innerHTML = `
       <div><h1>เบิกของ</h1><p class="sub">ช่างเลือกของ ใส่จำนวน แล้วกดเบิก ระบบตัดสต๊อกและแจ้งกลุ่มให้เอง</p></div>
+      ${pass ? `<div class="banner" style="background:#e8f5ec;color:#1f7a4d;border:1.5px solid #1f9d63">✅ สิทธิ์เบิก 1 ใบ · ดูแลการเบิกโดย <b>${esc(pass.sup)}</b></div>`
+        : `<div class="banner" style="background:#e8f5ec;color:#1f7a4d;border:1.5px solid #1f9d63">✅ เบิกในฐานะผู้ดูแล · ${esc(actor())} <button class="btn ghost small" id="selfOff" type="button">ยกเลิก</button></div>`}
       <section class="card stack">
         <label class="f">ค้นหาของ<input type="text" id="iq" placeholder="พิมพ์ชื่อหรือรหัส เช่น 2&quot; หรือ M12" value="${esc(S.issueQ || "")}"></label>
         <div class="stack">${list.map(it => { const s = stockOf(it.code); const inCart = cart.find(c => c.code === it.code);
@@ -1016,6 +1123,7 @@ window.SS_API = "https://script.google.com/macros/s/AKfycbxFSPc2_uv2mvQpDC7gEfaC
           <div class="meta">${r.lines.map(l => `${esc(item(l.code).name)} ×${fmtN(l.qty)}`).join(" · ")}</div></div>`).join("")
         : `<div class="card empty">ยังไม่มีการเบิก</div>`}</section>`;
     document.querySelectorAll("[data-isn]").forEach(el => { const f = () => showIssue(el.dataset.isn); el.onclick = f; el.onkeydown = e => { if (e.key === "Enter") f(); }; });
+    const so = $("#selfOff"); if (so) so.onclick = () => { S.selfIssue = false; render(); };
     const iq = $("#iq"); iq.oninput = () => { S.issueQ = iq.value; const pos = iq.selectionStart; render(); const n = $("#iq"); n.focus(); try { n.setSelectionRange(pos, pos); } catch {} };
     document.querySelectorAll("[data-add]").forEach(b => b.onclick = () => { if (!cart.find(c => c.code === b.dataset.add)) cart.push({ code: b.dataset.add, qty: 1 }); render(); });
     cart.forEach((c, i) => {
@@ -1035,10 +1143,12 @@ window.SS_API = "https://script.google.com/macros/s/AKfycbxFSPc2_uv2mvQpDC7gEfaC
     if (!S.issueForm.job.trim()) return toast("กรอกชื่องานที่จะใช้ของ");
     S.busy = true; render();
     try {
-      const res = await call("saveIssue", { by: actor(), zone: S.issueForm.zone, job: S.issueForm.job.trim(), photo: S.issueForm.photo || null, lines: cart.map(c => ({ code: c.code, qty: c.qty })) });
+      const pass = activePass();
+      const res = await call("saveIssue", { sid: pass ? pass.sid : null, pin: !pass && S.selfIssue ? supPin() : null, by: actor(), zone: S.issueForm.zone, job: S.issueForm.job.trim(), photo: S.issueForm.photo || null, lines: cart.map(c => ({ code: c.code, qty: c.qty })) });
       S.busy = false;
       if (!res.ok) { render(); return toast(res.error || "บันทึกการเบิกไม่สำเร็จ"); }
       S.issueCart = []; S.issueForm = { zone: S.issueForm.zone, job: "" };
+      S.pass = null; S.selfIssue = false; try { sessionStorage.removeItem("store.pass"); } catch {}
       toast(`เบิก ${res.no} แล้ว · LINE: ${res.lineResult}`);
       await load(); go("line");
     } catch (e) { S.busy = false; render(); toast("บันทึกการเบิกไม่สำเร็จ ลองอีกครั้ง"); }
@@ -1101,7 +1211,7 @@ window.SS_API = "https://script.google.com/macros/s/AKfycbxFSPc2_uv2mvQpDC7gEfaC
       <div class="spread"><div><h2>${esc(it.name)}</h2><div class="li-code">${esc(it.code)} · ที่เก็บ ${esc(it.location)}</div></div><button class="btn ghost small" data-close type="button">ปิด</button></div>
       <div class="kpis"><div class="kpi"><b>${fmtN(s.usable)}</b><span>ใช้งานได้ (${esc(it.unit)})</span></div><div class="kpi ${s.hold ? "bad" : ""}"><b>${fmtN(s.hold)}</b><span>พัก</span></div><div class="kpi"><b>${fmtN(it.openQty)}</b><span>ยอดยกมา</span></div></div>
       <div class="tablewrap"><table><thead><tr><th>เวลา</th><th>รายการ</th><th>อ้างอิง</th><th class="n">จำนวน</th></tr></thead><tbody>
-      ${hist.map(h => `<tr><td class="num">${tsTH(h.at)}</td><td>${TYPE[h.type] || esc(h.type)}${h.bucket === "hold" ? ` <span class="pill bad">พัก</span>` : ""}<div class="hint">${esc(h.by)}</div></td><td class="mono">${esc(h.ref)}${(() => { const is = h.type === "issue" && S.issues.find(x => x.no === h.ref); return is && is.photo ? `<div><a class="btn ghost small" href="https://drive.google.com/file/d/${encodeURIComponent(is.photo)}/view" target="_blank" rel="noopener">📷 ดูรูป</a></div>` : ""; })()}</td><td class="n" style="color:${h.qty < 0 ? "var(--bad)" : "var(--good)"};font-weight:600">${h.qty > 0 ? "+" : ""}${fmtN(h.qty)}</td></tr>`).join("")
+      ${hist.map(h => `<tr><td class="num">${tsTH(h.at)}</td><td>${TYPE[h.type] || esc(h.type)}${h.bucket === "hold" ? ` <span class="pill bad">พัก</span>` : ""}<div class="hint">${esc(h.by)}</div>${(() => { const is = h.type === "issue" && S.issues.find(x => x.no === h.ref); return is && is.supervisor ? `<div class="hint">ดูแลโดย ${esc(is.supervisor)}</div>` : ""; })()}</td><td class="mono">${esc(h.ref)}${(() => { const is = h.type === "issue" && S.issues.find(x => x.no === h.ref); return is && is.photo ? `<div><a class="btn ghost small" href="https://drive.google.com/file/d/${encodeURIComponent(is.photo)}/view" target="_blank" rel="noopener">📷 ดูรูป</a></div>` : ""; })()}</td><td class="n" style="color:${h.qty < 0 ? "var(--bad)" : "var(--good)"};font-weight:600">${h.qty > 0 ? "+" : ""}${fmtN(h.qty)}</td></tr>`).join("")
         || `<tr><td colspan="4" class="empty">ยังไม่มีการเคลื่อนไหว ยอดเท่ากับยอดยกมา</td></tr>`}
       </tbody></table></div></div></div>`;
     $("[data-close]").onclick = closeModal;
@@ -1158,7 +1268,7 @@ window.SS_API = "https://script.google.com/macros/s/AKfycbxFSPc2_uv2mvQpDC7gEfaC
   const showErr = m => { const v = document.getElementById("view"); if (v) v.innerHTML = '<div class="card"><h2>ข้อผิดพลาด</h2><p class="sub" style="white-space:pre-wrap">' + String(m).replace(/</g, "&lt;") + '</p></div>'; };
   window.addEventListener("error", e => showErr((e.message || "") + " @บรรทัด " + e.lineno));
   window.addEventListener("unhandledrejection", e => showErr(String((e.reason && e.reason.message) || e.reason)));
-  try { S.route = "scan"; render(); load(); } catch (e) { showErr((e && e.stack) || e); }
+  try { S.route = "scan"; render(); load().then(claimFromUrl); } catch (e) { showErr((e && e.stack) || e); }
   setTimeout(() => { if (!S.ready && !S.offline) showErr("getState ไม่ตอบกลับภายใน 12 วินาที"); }, 12000);
 })();
 
