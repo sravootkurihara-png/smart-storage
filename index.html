@@ -540,14 +540,14 @@ window.SS_API = "https://script.google.com/macros/s/AKfycbxFSPc2_uv2mvQpDC7gEfaC
   function vScan() {
     const low = S.items.filter(i => { const s = stockOf(i.code); return i.reorder > 0 && s.usable <= i.reorder; }).length;
     const holds = S.ncrs.filter(n => n.status === "open").length;
-    const opens = openPOs().length;
+    const todayRecv = S.grns.filter(g => String(g.at).slice(0, 10) === today()).length;
     $("#view").innerHTML = `
       <section class="hero">
         <div class="hero-top"><span class="hero-chip">ไซต์ · ${esc(SITE)}</span><span class="hero-date">${dateTH(today())}</span></div>
         <h1 class="hero-title" style="font-size:26px">Smart Storage for construction work</h1>
         <p class="hero-sub">ระบบจัดเก็บสินค้าอัจฉริยะในงานก่อสร้าง — สแกน รับ เบิก แจ้ง LINE ในมือถือเครื่องเดียว</p>
         <div class="hero-stats">
-          <button class="hs" data-go="receive" type="button"><b>${opens}</b><span>PO ค้างส่ง</span></button>
+          <button class="hs" data-go="receive" type="button"><b>${todayRecv}</b><span>รับของวันนี้</span></button>
           <button class="hs ${holds ? "alert" : ""}" data-go="stock" type="button"><b>${holds}</b><span>ของพักรอตัดสิน</span></button>
           <button class="hs ${low ? "warn" : ""}" data-go="stock" type="button"><b>${low}</b><span>ต่ำกว่าจุดสั่งซื้อ</span></button>
         </div>
@@ -555,7 +555,7 @@ window.SS_API = "https://script.google.com/macros/s/AKfycbxFSPc2_uv2mvQpDC7gEfaC
       <div class="bigbtns">
         <button class="bigbtn" data-go="receive" type="button">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7z"/><circle cx="7" cy="18" r="1.6"/><circle cx="17" cy="18" r="1.6"/></svg>
-          <b>รับของ</b><span>${opens} PO รอรับของ</span>
+          <b>รับของ</b><span>ถ่ายใบส่งของ สร้างเช็คลิสต์</span>
         </button>
         <button class="bigbtn" data-go="issue" type="button">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6v3H9z"/><path d="M7 5H5v15h14V5h-2"/><path d="M9 12h6M9 16h4"/></svg>
@@ -582,38 +582,20 @@ window.SS_API = "https://script.google.com/macros/s/AKfycbxFSPc2_uv2mvQpDC7gEfaC
 
   // ---------- receive ----------
   function vReceive() {
-    if (S.recv) return vReceiveForm();
-    const q = (S.poQ || "").trim().toLowerCase();
-    const all = openPOs();
-    const pos = all.filter(p => !q || p.poNo.toLowerCase().includes(q) || (p.orderedBy || "").toLowerCase().includes(q) || (p.supplier || "").toLowerCase().includes(q));
+    if (!S.recv) S.recv = newRecv();
+    return vReceiveForm();
+  }
+  function recentGrnsHtml() {
     const recent = [...S.grns].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 6);
-    $("#view").innerHTML = `
-      <div><h1>รับของเข้า</h1><p class="sub">ขั้นที่ 1 จาก 3: หา PO เพื่ออ้างอิง ถ้าไม่มีก็ข้ามได้</p></div>
-      <label class="f">ค้นหาด้วยเลข PO หรือชื่อผู้สั่ง
-        <input type="text" id="poQ" placeholder="เช่น 0123 หรือ จัดซื้อ" value="${esc(S.poQ || "")}" autocomplete="off"></label>
-      <button class="btn block" id="noPo" type="button">ไม่มี PO / หาไม่เจอ — รับของเลย</button>
-      <section class="section">
-        <span class="eyebrow">PO ที่รอรับของ ${q ? `· พบ ${pos.length} จาก ${all.length}` : `(${all.length})`}</span>
-        ${pos.length ? pos.map(p => {
-          const pr = poProgress(p); const late = p.due && p.due < today();
-          return `<div class="card tap" tabindex="0" role="button" data-po="${esc(p.poNo)}">
-            <div class="po-head"><span class="po-no">${esc(p.poNo)}</span>
-              ${late ? `<span class="pill bad">เลยกำหนด ${dateTH(p.due)}</span>` : `<span class="pill mute">กำหนดส่ง ${dateTH(p.due)}</span>`}</div>
-            <div style="font-weight:600;margin-top:4px">ผู้สั่ง: ${esc(p.orderedBy)}</div>
-            <div class="meta">${esc(p.supplier)} · ${p.lines.length} รายการ · ค้าง ${pr.outstandingLines} รายการ</div>
-            <div class="bar" style="margin-top:8px"><i style="width:${pr.ordered ? Math.round(pr.got / pr.ordered * 100) : 0}%"></i></div>
-          </div>`; }).join("") : `<div class="card empty">${q ? "ไม่พบ PO ที่ตรงกับคำค้น กดปุ่ม \"ไม่มี PO\" ด้านบนเพื่อรับของต่อได้เลย" : "ไม่มี PO ค้างส่งในระบบ รับของได้เลย"}</div>`}
-      </section>
-      <section class="section">
+    return `<section class="section">
         <span class="eyebrow">รับของล่าสุด</span>
         ${recent.length ? recent.map(g => `<div class="card tap" tabindex="0" role="button" data-grn="${esc(g.id)}">
           <div class="po-head"><span class="po-no">${esc(g.no)}</span>${statusPill(g.status)}</div>
-          <div class="meta">${tsTH(g.at)} · ${g.poNo ? `PO ${esc(g.poNo)}` : "ไม่มี PO"} · ${g.doNo ? `DO ${esc(g.doNo)}` : "ไม่มีใบส่งของ"} · ${esc(g.supplier || "")} · ${esc(g.by)}</div></div>`).join("")
+          <div class="meta">${tsTH(g.at)} · ${g.doNo ? `ใบส่งของ ${esc(g.doNo)}` : "ไม่มีใบส่งของ"} · ${esc(g.supplier || "")} · ${esc(g.by)}</div></div>`).join("")
         : `<div class="card empty">ยังไม่มีการรับของ</div>`}
       </section>`;
-    $("#noPo").onclick = () => startReceive(null);
-    const pq = $("#poQ"); pq.oninput = () => { S.poQ = pq.value; const p = pq.selectionStart; render(); const n = $("#poQ"); n.focus(); try { n.setSelectionRange(p, p); } catch {} };
-    document.querySelectorAll("[data-po]").forEach(el => { const f = () => startReceive(el.dataset.po); el.onclick = f; el.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); f(); } }; });
+  }
+  function bindRecentGrns() {
     document.querySelectorAll("[data-grn]").forEach(el => { const f = () => showGrn(el.dataset.grn); el.onclick = f; el.onkeydown = e => { if (e.key === "Enter") f(); }; });
   }
   function statusPill(s) {
@@ -623,8 +605,11 @@ window.SS_API = "https://script.google.com/macros/s/AKfycbxFSPc2_uv2mvQpDC7gEfaC
   const MAX_PAGES = 5;
   function startReceive(poNo) {
     if (poNo && !S.pos.find(p => p.poNo === poNo)) return;
-    S.recv = { poNo: poNo || null, supplier: "", doNo: "", pages: [], goods: [], noDo: false, stage: "photo", reading: false, readMsg: "", readNote: "", rows: [], ctl: null };
+    S.recv = newRecv();
     render(); window.scrollTo({ top: 0 });
+  }
+  function newRecv() {
+    return { poNo: null, supplier: "", doNo: "", pages: [], goods: [], noDo: false, stage: "photo", reading: false, readMsg: "", readNote: "", rows: [], ctl: null };
   }
   const curPo = () => S.recv && S.recv.poNo ? S.pos.find(p => p.poNo === S.recv.poNo) || null : null;
   const poLine = (po, code) => po ? (po.lines || []).find(l => l.code === code) : null;
@@ -709,15 +694,16 @@ window.SS_API = "https://script.google.com/macros/s/AKfycbxFSPc2_uv2mvQpDC7gEfaC
   function vReceiveForm() {
     const R = S.recv, po = curPo();
     const head = `
-      <div class="row"><button class="btn ghost small" id="back" type="button">‹ กลับไปค้นหา PO</button></div>
+      <div><h1>รับของเข้า</h1><p class="sub">ถ่ายรูปใบส่งของที่มากับรถ ระบบอ่านแล้วสร้างเช็คลิสต์ให้ ติ๊กตามของจริงแล้วบันทึก</p></div>
+      ${R.pages.length || R.noDo ? `<div class="row"><button class="btn ghost small" id="back" type="button">‹ เริ่มรับของใหม่</button></div>` : ""}
       ${po ? `<section class="card stack">
         <div class="po-head"><div><span class="eyebrow">อ้างอิง PO</span><div class="po-no" style="font-size:18px">${esc(po.poNo)}</div></div>
           <button class="btn small" id="viewPo" type="button">เปิดดู PO (PDF)</button></div>
         <div class="meta">ผู้สั่ง ${esc(po.orderedBy)} · ${esc(po.supplier)} · กำหนดส่ง ${dateTH(po.due)}</div>
-      </section>` : `<section class="card stack"><span class="eyebrow">ไม่อ้างอิง PO</span>
+      </section>` : `<section class="card stack"><span class="eyebrow">ผู้ส่งของ</span>
         <label class="f">ผู้ส่ง / ร้าน${R.stage === "photo" ? " (อ่านจากใบส่งของให้อัตโนมัติ)" : ""}<input type="text" id="sup" placeholder="ชื่อร้านหรือบริษัทที่มาส่ง" value="${esc(R.supplier)}"></label></section>`}`;
     const bindHead = () => {
-      $("#back").onclick = () => { if (R.ctl) R.ctl.abort(); S.recv = null; render(); };
+      const bk = $("#back"); if (bk) bk.onclick = () => { if (R.ctl) R.ctl.abort(); S.recv = null; render(); };
       const vp = $("#viewPo"); if (vp) vp.onclick = () => showPoDoc(po.poNo);
       const sp = $("#sup"); if (sp) sp.oninput = () => { R.supplier = sp.value; };
     };
@@ -725,7 +711,7 @@ window.SS_API = "https://script.google.com/macros/s/AKfycbxFSPc2_uv2mvQpDC7gEfaC
       const n = R.pages.length;
       $("#view").innerHTML = head + `
         <section class="card stack">
-          <span class="eyebrow">ขั้นที่ 2 จาก 3</span>
+          <span class="eyebrow">ขั้นที่ 1 จาก 2</span>
           <h2>ถ่ายรูปใบส่งของที่มากับรถ</h2>
           <p class="hint" style="margin:0">วางใบส่งของราบ ถ่ายตรงจากด้านบนให้เต็มจอ ใบยาวหลายหน้าถ่ายทีละหน้าได้ไม่เกิน ${MAX_PAGES} หน้า ระบบจะรวมเป็นเช็คลิสต์เดียว</p>
           ${n ? thumbStrip(R.pages, "page") : ""}
@@ -740,9 +726,8 @@ window.SS_API = "https://script.google.com/macros/s/AKfycbxFSPc2_uv2mvQpDC7gEfaC
           <b>ไม่มีใบส่งของมากับรถ?</b>
           <p class="hint" style="margin:0">ถ่ายรูปของที่มาส่ง แล้วพิมพ์ชื่อรายการกับจำนวนเอง</p>
           <button class="btn block" id="noDoBtn" type="button">ไม่มีใบส่งของ — ถ่ายรูปของแล้วพิมพ์รายการ</button>
-          ${po ? `<button class="btn ghost small" id="manual" type="button">มีใบส่งของ แต่ไม่ถ่าย ใช้รายการจาก PO ติ๊กเทียบแทน</button>` : ""}
-        </section>`}`;
-      bindHead(); bindThumbs();
+        </section>`}` + (R.pages.length || R.reading ? "" : recentGrnsHtml());
+      bindHead(); bindThumbs(); bindRecentGrns();
       const cam = $("#doCam");
       if (cam) cam.onchange = async () => {
         const f = cam.files && cam.files[0]; if (!f) return;
@@ -765,16 +750,16 @@ window.SS_API = "https://script.google.com/macros/s/AKfycbxFSPc2_uv2mvQpDC7gEfaC
     const needGoods = R.noDo && !R.goods.length;
     $("#view").innerHTML = head + `
       ${R.noDo ? `<section class="card stack">
-        <span class="eyebrow">ขั้นที่ 3 จาก 3 · ไม่มีใบส่งของ</span>
+        <span class="eyebrow">ขั้นที่ 2 จาก 2 · ไม่มีใบส่งของ</span>
         <div class="f"><span>รูปของที่มาส่ง (อย่างน้อย 1 รูป)</span></div>
         ${R.goods.length ? thumbStrip(R.goods, "goods") : ""}
         <div class="picks block"><label class="btn ${R.goods.length ? "" : "primary"} filebtn cam">📷 ${R.goods.length ? "+ ถ่ายรูปเพิ่ม" : "ถ่ายรูปของที่มาส่ง"}<input type="file" accept="image/*" capture="environment" id="goodsCam"></label><label class="btn ${R.goods.length ? "" : ""} filebtn gal">🖼️ จากคลังภาพ<input type="file" accept="image/*" data-for="goodsCam"></label></div>
         ${R.readNote ? `<div class="note">${esc(R.readNote)}</div>` : ""}
         <button class="btn ghost small" id="toPhoto" type="button">มีใบส่งของ กลับไปถ่ายใบส่งของ</button>
       </section>` : `<section class="card stack">
-        <span class="eyebrow">ขั้นที่ 3 จาก 3 · เช็คลิสต์จากใบส่งของ</span>
+        <span class="eyebrow">ขั้นที่ 2 จาก 2 · เช็คลิสต์จากใบส่งของ</span>
         ${R.pages.length ? thumbStrip(R.pages, "page") : ""}
-        <label class="f">เลขที่ใบส่งของ (DO)<input type="text" id="doNo" placeholder="เช่น 88412" value="${esc(R.doNo)}"></label>
+        ${R.doNo ? `<div class="meta">เลขที่ใบส่งของ (อ่านจากรูป): <b>${esc(R.doNo)}</b></div>` : ""}
         ${R.readNote ? `<div class="note">${esc(R.readNote)}</div>` : ""}
         ${R.pages.length ? "" : `<button class="btn small" id="toPhoto" type="button">ถ่ายรูปใบส่งของให้ระบบอ่าน</button>`}
       </section>`}
@@ -918,7 +903,6 @@ window.SS_API = "https://script.google.com/macros/s/AKfycbxFSPc2_uv2mvQpDC7gEfaC
     const rows = R.rows.filter(r => r.qty > 0 && (r.typed || r.checked) && r.code && (r.code !== "__new__" || r.newName.trim()));
     if (!rows.length) return toast(R.noDo ? "พิมพ์ชื่อรายการและจำนวนอย่างน้อย 1 รายการ" : "ติ๊กรายการที่นับแล้วอย่างน้อย 1 รายการ");
     if (R.noDo && !R.goods.length) return toast("ถ่ายรูปของที่มาส่งอย่างน้อย 1 รูป");
-    if (!R.noDo && !R.doNo.trim()) { toast("กรอกเลขที่ใบส่งของ (DO) ก่อน"); const d = $("#doNo"); if (d) d.focus(); return; }
     if (rows.find(r => !r.pass && !r.note.trim())) return toast("รายการที่แจ้งปัญหาต้องใส่สาเหตุ");
     S.busy = true; render();
     try {
@@ -964,7 +948,7 @@ window.SS_API = "https://script.google.com/macros/s/AKfycbxFSPc2_uv2mvQpDC7gEfaC
     const g = S.grns.find(x => x.id === id); if (!g) return;
     $("#modalRoot").innerHTML = `<div class="modal" role="dialog" aria-modal="true"><div class="sheet">
       <div class="spread"><h2 class="mono">${esc(g.no)}</h2><button class="btn ghost small" data-close type="button">ปิด</button></div>
-      <div class="meta">${tsTH(g.at)} · ผู้รับ ${esc(g.by)}<br>${g.poNo ? `PO ${esc(g.poNo)}` : "ไม่มี PO"} · ${g.doNo ? `DO ${esc(g.doNo)}` : "ไม่มีใบส่งของ"} · ${esc(g.supplier)}</div>
+      <div class="meta">${tsTH(g.at)} · ผู้รับ ${esc(g.by)}<br>${g.poNo ? `PO ${esc(g.poNo)} · ` : ""}${g.doNo ? `DO ${esc(g.doNo)}` : "ไม่มีใบส่งของ"} · ${esc(g.supplier)}</div>
       ${statusPill(g.status)}
       <div class="tablewrap"><table><thead><tr><th>รายการ</th><th class="n">รับ</th><th>ผล</th><th>หมายเหตุ</th></tr></thead><tbody>
       ${g.lines.map(l => { const it = item(l.code); return `<tr><td>${esc(it.name)}${l.measured ? `<div class="hint">วัดได้ ${esc(l.measured)} มม.</div>` : ""}</td><td class="n">${fmtN(l.qty)} ${esc(it.unit)}</td><td>${l.pass ? `<span class="pill good">ผ่าน</span>` : `<span class="pill bad">ไม่ผ่าน</span>`}</td><td>${esc(l.note || "-")}</td></tr>`; }).join("")}
@@ -1079,16 +1063,16 @@ window.SS_API = "https://script.google.com/macros/s/AKfycbxFSPc2_uv2mvQpDC7gEfaC
           return `<div class="card stack" style="border-color:var(--bad)">
             <div class="po-head"><span class="po-no">${esc(n.no)}</span>${days >= 7 ? `<span class="pill bad">ค้าง ${days} วัน</span>` : `<span class="pill warn">ค้าง ${days} วัน</span>`}</div>
             <div><b>${esc(it.name)}</b> · ${fmtN(n.qty)} ${esc(it.unit)}</div>
-            <div class="meta">สาเหตุ: ${esc(n.reason)}<br>${esc(n.grnNo)} · ${n.poNo ? `PO ${esc(n.poNo)}` : "ไม่มี PO"} · ${esc(n.supplier)}</div>
+            <div class="meta">สาเหตุ: ${esc(n.reason)}<br>${esc(n.grnNo)} · ${n.poNo ? `PO ${esc(n.poNo)} · ` : ""}${esc(n.supplier)}</div>
             <div class="row"><button class="btn small" type="button" data-ncr="accept" data-id="${esc(n.id)}">ยอมรับ (PM อนุมัติ)</button>
               <button class="btn small danger" type="button" data-ncr="return" data-id="${esc(n.id)}">คืนผู้ขาย</button></div></div>`; }).join("")
         : `<div class="card empty">ไม่มีของพัก ของที่ตรวจไม่ผ่านตอนรับจะมาอยู่ที่นี่</div>`}
       </section>
       <section class="section">
         <div class="spread"><span class="eyebrow">ยอดคงเหลือ</span><input type="text" id="sf" placeholder="ค้นหา" value="${esc(S.stockFilter)}" style="max-width:180px"></div>
-        <div class="tablewrap"><table><thead><tr><th>รายการ</th><th class="n">ใช้งานได้</th><th class="n">พัก</th><th class="n">ค้างส่ง</th><th>สถานะ</th></tr></thead><tbody>
+        <div class="tablewrap"><table><thead><tr><th>รายการ</th><th class="n">ใช้งานได้</th><th class="n">พัก</th><th>สถานะ</th></tr></thead><tbody>
         ${rows.map(r => `<tr class="click" data-item="${esc(r.it.code)}" tabindex="0"><td><div style="font-weight:600">${esc(r.it.name)}</div><div class="li-code">${esc(r.it.code)} · ${esc(r.it.location)}</div></td>
-          <td class="n"><b>${fmtN(r.usable)}</b> ${esc(r.it.unit)}</td><td class="n">${r.hold ? `<span style="color:var(--bad);font-weight:600">${fmtN(r.hold)}</span>` : "–"}</td><td class="n">${r.onOrder ? fmtN(r.onOrder) : "–"}</td>
+          <td class="n"><b>${fmtN(r.usable)}</b> ${esc(r.it.unit)}</td><td class="n">${r.hold ? `<span style="color:var(--bad);font-weight:600">${fmtN(r.hold)}</span>` : "–"}</td>
           <td>${r.usable <= 0 ? `<span class="pill bad">หมด</span>` : r.low ? `<span class="pill warn">ต่ำกว่า ${fmtN(r.it.reorder)}</span>` : `<span class="pill good">ปกติ</span>`}</td></tr>`).join("")}
         </tbody></table></div>
         <p class="hint">แตะแถวเพื่อดูประวัติเข้า–ออกของรายการนั้น</p>
