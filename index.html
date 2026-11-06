@@ -648,7 +648,7 @@ window.SS_API = "https://script.google.com/macros/s/AKfycbxFSPc2_uv2mvQpDC7gEfaC
     const ctl = R.ctl; render();
     let out;
     try { out = await call("readDeliveryNote", R.pages.map(p => p.hi || p.lo), po ? po.poNo : null); }
-    catch (e) { out = { ok: false, error: e.message }; }
+    catch (e) { out = { ok: false, error: /ต่อเซิร์ฟเวอร์ไม่ได้/.test(e.message) ? "รออ่านนานเกินไป หรือสัญญาณหลุด" : e.message }; }
     if (ctl.aborted || S.recv !== R) return;
     R.reading = false; R.ctl = null;
     if (!out.ok) {
