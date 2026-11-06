@@ -1027,6 +1027,7 @@ window.SS_API = "https://script.google.com/macros/s/AKfycbxFSPc2_uv2mvQpDC7gEfaC
           <li>สแกนด้วยกล้องมือถือ หน้าเบิกของจะเปิดขึ้นเอง</li>
         </ol>
         <p class="hint" style="margin:0">ผู้ดูแลจะเห็นของที่เบิกทุกครั้ง และชื่อผู้ดูแลจะบันทึกในใบเบิก</p>
+        ${S.passErr ? `<div class="note" style="background:#fff3f1;border-color:#d9412f;color:#9b2a1d">${esc(S.passErr)}</div>` : ""}
       </section>
       <button class="btn ghost small" id="supOn" type="button">ฉันเป็นวิศวกร / คนดูแลสโตร์</button>` + recentIssuesHtml();
     bindRecentIssues();
@@ -1068,15 +1069,22 @@ window.SS_API = "https://script.google.com/macros/s/AKfycbxFSPc2_uv2mvQpDC7gEfaC
     if (left <= 5) { S.passQr = null; requestPass(); }
     else { const el = $("#passLeft"); if (el) el.textContent = left + " วินาที"; }
   }, 1000);
+  // เก็บสิทธิ์เบิกไว้ใน localStorage: เปิดลิงก์จากกล้องแล้วสลับไปแท็บแอปเดิมก็ยังเบิกได้
+  function loadPass() { try { const s = JSON.parse(localStorage.getItem("store.pass") || "null"); if (s && s.exp > Date.now()) S.pass = s; else if (s) localStorage.removeItem("store.pass"); } catch {} }
+  function savePass() { try { if (S.pass) localStorage.setItem("store.pass", JSON.stringify(S.pass)); else localStorage.removeItem("store.pass"); } catch {} }
+  const recheckPass = () => { if (S.route === "issue" && !activePass()) { loadPass(); if (activePass()) { S.passErr = ""; render(); } } };
+  window.addEventListener("focus", recheckPass);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) recheckPass(); });
   async function claimFromUrl() {
     let tok = ""; try { tok = new URLSearchParams(location.search).get("pass") || ""; } catch {}
-    if (!tok) { try { const s = JSON.parse(sessionStorage.getItem("store.pass") || "null"); if (s && s.exp > Date.now()) S.pass = s; } catch {} return; }
+    if (!tok) { loadPass(); if (S.pass && S.route !== "issue") go("issue"); return; }
     try { const u = new URL(location.href); u.searchParams.delete("pass"); history.replaceState(null, "", u.pathname + u.search + "#issue"); } catch {}
     try {
       const r = await call("claimIssuePass", tok);
-      if (!r.ok) { toast(r.error); go("issue"); return; }
+      if (!r.ok) { loadPass(); if (!activePass()) { S.passErr = r.error; toast(r.error); } go("issue"); return; }
+      S.passErr = "";
       S.pass = { sid: r.sid, sup: r.sup, exp: Date.now() + 19 * 60000 };
-      try { sessionStorage.setItem("store.pass", JSON.stringify(S.pass)); } catch {}
+      savePass();
       toast("เปิดการเบิกแล้ว · ดูแลโดย " + r.sup); go("issue");
     } catch (e) { toast("เปิดการเบิกไม่สำเร็จ ลองสแกนใหม่"); go("issue"); }
   }
@@ -1148,7 +1156,7 @@ window.SS_API = "https://script.google.com/macros/s/AKfycbxFSPc2_uv2mvQpDC7gEfaC
       S.busy = false;
       if (!res.ok) { render(); return toast(res.error || "บันทึกการเบิกไม่สำเร็จ"); }
       S.issueCart = []; S.issueForm = { zone: S.issueForm.zone, job: "" };
-      S.pass = null; S.selfIssue = false; try { sessionStorage.removeItem("store.pass"); } catch {}
+      S.pass = null; S.selfIssue = false; savePass();
       toast(`เบิก ${res.no} แล้ว · LINE: ${res.lineResult}`);
       await load(); go("line");
     } catch (e) { S.busy = false; render(); toast("บันทึกการเบิกไม่สำเร็จ ลองอีกครั้ง"); }
