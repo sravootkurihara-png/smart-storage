@@ -759,7 +759,7 @@ window.SS_API = "https://script.google.com/macros/s/AKfycbxFSPc2_uv2mvQpDC7gEfaC
       </section>` : `<section class="card stack">
         <span class="eyebrow">ขั้นที่ 2 จาก 2 · เช็คลิสต์จากใบส่งของ</span>
         ${R.pages.length ? thumbStrip(R.pages, "page") : ""}
-        ${R.doNo ? `<div class="meta">เลขที่ใบส่งของ (อ่านจากรูป): <b>${esc(R.doNo)}</b></div>` : ""}
+        <label class="f">เลขที่ใบส่งของ ${R.doNo ? "(อ่านจากรูป แก้ได้)" : "(ถ้ามี)"}<input type="text" id="doNo" placeholder="เช่น 0227186" value="${esc(R.doNo || "")}" autocomplete="off"></label>
         ${R.readNote ? `<div class="note">${esc(R.readNote)}</div>` : ""}
         ${R.pages.length ? "" : `<button class="btn small" id="toPhoto" type="button">ถ่ายรูปใบส่งของให้ระบบอ่าน</button>`}
       </section>`}
